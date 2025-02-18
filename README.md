@@ -2,13 +2,20 @@
 
 This project contains a variety of simulation experiments organized into hierarchical directories. Below, you'll find an explanation of the structure, followed by the tree structure for reference.
 
+## Data
+
+The data can be found as a .zip file in the project's directory.
+
 ## Description
 
 The project is divided into two main categories:
 
-1. **`experiments`**: This directory contains simulations for different scenarios such as `fallingDrop`, `explodingLiquid`, and `constantVelocityCube`. 
+1. **`NormalExperiments`**: This directory contains simulations for different scenarios such as `fallingDrop`, `explodingLiquid`, and `constantVelocityCube`. 
 
-2. **`percentageExperiments`**: This directory focuses on experiments for percentage-based analyses. Similar to `experiments`, the organization follows a hierarchical structure under different scenarios.
+2. **`PercentageExperiments`**: This directory focuses on experiments for percentage-based analyses. Similar to `experiments`, the organization follows a hierarchical structure under different scenarios.
+
+3. **`CheckpointExperiments`**
+
 
 Within these directories, the hierarchy provides specific details for each type of test, with subdirectories for variations and test types. The structure is repetitive,as indicated by the `...` in the tree structure.
 
@@ -17,7 +24,7 @@ Within these directories, the hierarchy provides specific details for each type 
 Here is the detailed tree structure:
 
 ```
-experiments
+NormalExperiments
 ├── fallingDrop
 │   ├── withTuning
 │   │   ├── frequency_tests

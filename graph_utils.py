@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 import os
 import re
 import math
@@ -7,12 +8,38 @@ import pandas as pd
 import numpy as np
 from matplotlib import cm, colors
 
+class PlotInfo:
+    def __init__(self, x_label, y_label, title ):
+        self.x_label = x_label
+        self.y_label = y_label
+        self.title = title
+
+def sort_criteria(folder):
+    if "fastParticleBuffer" in folder:
+        suffix = folder.replace("fastParticleBuffer", "")
+
+        if suffix == '':
+            return 100000.0
+
+        if suffix.startswith("0") and len(suffix) > 1:
+            suffix = f"{suffix[0]}.{suffix[1:]}"
+
+        try:
+            result = float(suffix)
+
+        except ValueError:
+            result = 99999
+
+        return result
+    else:
+        return float('inf')
+
 # supposing the yaml is one level up from path (which is the case most of the time)
 def find_yaml(path):
     parent = os.path.dirname(path)
     yaml_files = [f for f in os.listdir(parent) if f.endswith(".yaml")]
     if len(yaml_files) == 0:
-        raise Exception("No Yaml File was Found")
+        raise Exception(f"No Yaml File was Found in {path}")
     elif len(yaml_files) > 1:
         print("Multiple .yaml Files found. Printing the first one...")
 
@@ -79,6 +106,89 @@ def map_folders_to_colors(folders):
     return folder_colors
 
 
+def generate_distinct_colors(x):
+    cmap = plt.get_cmap("tab10") if x <= 10 else plt.get_cmap("tab20")
+    excluded_colors = {cmap(1), cmap(2)}  # tab10: 1 (orange), 2 (blue)
+
+    cols = []
+    for i in range(cmap.N):
+        color = cmap(i % cmap.N)
+        if color not in excluded_colors:
+            cols.append(color)
+        if len(cols) >= x:
+            break
+
+    return cols
+
+def read_slurm(folders, base_path, is_percentage, is_distribution_plot):
+    data = {folder: {"value": [], "time": []} for folder in folders}
+
+    time_pattern = re.compile(r"Total wall-clock time\s+:\s+(\d+)\s+ns")
+
+    if "frequency" in base_path:
+        pattern = re.compile(r"verlet-rebuild-frequency\s+:\s+(\d+)")
+    else:
+        pattern = re.compile(r"iterations\s+:\s+(\d+)")
+
+    for folder in folders:
+        folder_path = os.path.join(base_path, folder)
+        for subfolder in os.listdir(folder_path):
+            if "frequency" in subfolder or "iteration" in subfolder:
+                subfolder_path = os.path.join(folder_path, subfolder)
+
+                value_pattern = re.compile(r"[a-zA-Z0-9_-]+_(\d+)\.(\d+)")
+
+                files_to_process = os.listdir(subfolder_path)
+                oldest_file = None
+                slurm_id = float('inf')
+
+
+
+                if not is_percentage:
+                    for file in os.listdir(subfolder_path):
+                        if file.endswith(".out"):
+                            match = value_pattern.search(file)
+
+                            if match:
+                                d2 = int(match.group(2))  # Extract the second number (d2)
+                                if not is_percentage and d2 < slurm_id:
+                                    slurm_id = d2
+                                    oldest_file = file
+
+                    files_to_process = [oldest_file]
+
+
+
+                times = []
+                value = -1
+
+                for file in files_to_process:
+
+                    if file.endswith(".out"):
+                        file_path = os.path.join(subfolder_path, file)
+
+                        with open(file_path, "r") as f:
+                            content = f.read()
+                            value_match = pattern.search(content)
+                            time_match = time_pattern.search(content)
+
+                            if value_match and time_match:
+                                value = int(value_match.group(1))
+                                time_ns = int(time_match.group(1))
+                                time_s = time_ns / 1e9
+                                times.append(time_s)
+
+                                if not is_distribution_plot:
+                                    data[folder]["value"].append(value)
+                                    data[folder]["time"].append(time_s)
+
+                if is_distribution_plot:
+                    data[folder]["value"].append(value)
+                    data[folder]["time"].append(times)
+
+    return data
+
+
 def read_and_process_csv(file_path, column_names, avg_window):
     try:
         df = pd.read_csv(file_path, on_bad_lines='skip')
@@ -113,86 +223,44 @@ def read_and_process_csv(file_path, column_names, avg_window):
         return None
 
 
-def read_slurm(folders, base_path, is_percentage, is_distribution_plot):
-    data = {folder: {"value": [], "time": []} for folder in folders}
+def get_newest_csv(folder_path):
+    csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
 
-    time_pattern = re.compile(r"Total wall-clock time\s+:\s+(\d+)\s+ns")
-    
-    if "frequency" in base_path:
-        pattern = re.compile(r"verlet-rebuild-frequency\s+:\s+(\d+)")
-    else:
-        pattern = re.compile(r"iterations\s+:\s+(\d+)")
-        
-    for folder in folders:
-        folder_path = os.path.join(base_path, folder)
-        for subfolder in os.listdir(folder_path):
-            if "frequency" in subfolder or "iteration" in subfolder:
-                subfolder_path = os.path.join(folder_path, subfolder)
+    if not csv_files:
+        return None
 
-                value_pattern = re.compile(r"slurm-autopas_(\d+).(\d+)")
+    csv_files_full_path = [os.path.join(folder_path, f) for f in csv_files]
 
-                files_to_process =  os.listdir(subfolder_path)
-                oldest_file = None
-                slurm_id = float('inf')
+    newest_csv = max(csv_files_full_path, key=os.path.getmtime)
 
-                if not is_percentage:
-                    for file in os.listdir(subfolder_path):
-                        if file.startswith("slurm-autopas") and file.endswith(".out"):
-                            match = value_pattern.search(file)
-
-                            if match:
-                                d2 = int(match.group(2))  # Extract the second number (d2)
-                                if not is_percentage and d2 < slurm_id:
-                                    slurm_id = d2
-                                    oldest_file = file
-
-                    files_to_process = [oldest_file]
-
-
-                times = []
-                value = -1
-
-                for file in files_to_process:
-
-                    if file.startswith("slurm-autopas") and file.endswith(".out"):
-                        file_path = os.path.join(subfolder_path, file)
-
-                        with open(file_path, "r") as f:
-                            content = f.read()
-                            value_match = pattern.search(content)
-                            time_match = time_pattern.search(content)
-
-                            if value_match and time_match:
-                                value = int(value_match.group(1))
-                                time_ns = int(time_match.group(1))
-                                time_s = time_ns / 1e9
-                                times.append(time_s)
-
-                                if not is_distribution_plot:
-                                    data[folder]["value"].append(value)
-                                    data[folder]["time"].append(time_s)
-
-                if is_distribution_plot:
-                    data[folder]["value"].append(value)
-                    data[folder]["time"].append(times)
-
-    return data
-
+    return newest_csv
 
 def get_plotting_data(base_path, folder_name, value, column_names, mode, avg_window):
     name = "frequency" if mode == 0 else "iteration"
     folder_path = os.path.join(base_path, folder_name, f'{name}_{value}')
-    files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
-    if len(files) > 1:
-        raise ValueError(f'More than one csv file found in {folder_path}')
-    file = files[0]
-    file_path = os.path.join(folder_path, file)
+    file = get_newest_csv(folder_path)
+    if file is None:
+        raise TypeError(f'No .csv file in {folder_path}')
 
-    data = read_and_process_csv(file_path, column_names, avg_window)
+    data = read_and_process_csv(file, column_names, avg_window)
     if data is None:
         raise TypeError(f'Data in {folder_path} is none')
 
     return data
 
+
+
+def extract_sorted_values(base_path):
+    values = []
+    pattern = re.compile(r'_(\d+)$')
+
+    for folder_name in os.listdir(base_path):
+        folder_path = os.path.join(base_path, folder_name)
+        if os.path.isdir(folder_path):
+            match = pattern.search(folder_name)
+            if match:
+                values.append(int(match.group(1)))
+
+    return sorted(values)
 
 

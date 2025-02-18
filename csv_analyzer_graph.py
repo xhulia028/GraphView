@@ -1,11 +1,13 @@
 import matplotlib
+import os
 matplotlib.use('TkAgg')
 from enum import Enum
 import tkinter as tk
 from tkinter import ttk
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from graph_utils import get_plotting_data, get_iterations, get_frequencies
+from graph_utils import PlotInfo, get_plotting_data, generate_distinct_colors, extract_sorted_values, map_folders_to_colors
 
 
 fig = None
@@ -19,90 +21,121 @@ class PlotType(Enum):
     # one plot for one branch
     SINGLE_PLOT = 2
 
-class PlotInfo:
-    def __init__(self, x_label, y_label, title ):
-        self.x_label = x_label
-        self.y_label = y_label
-        self.title = title
 
 class CsvAnalyzer:
 
-    def __init__(self, base_path, columns, plot_info: PlotInfo, plot_type: PlotType, avg_window):
+    def __init__(self, base_path, columns, plot_info: PlotInfo, plot_type: PlotType, avg_window, folders):
+
         self.base_path = base_path
         self.columns = columns
         self.avg_window = avg_window
 
         self.plot_info = plot_info
-        self.folders = ["fastParticleBuffer", "dynamicVLMerge"]
+        if len(folders) < 1:
+            raise TypeError("Length of folders is 0. There must at least be one folder")
+        self.folders = folders
+        print(folders)
         self.plot_type = plot_type
 
         self.mode = 0 if "frequency" in base_path else 1
 
-        if self.mode:
-            self.values = get_iterations()
-        else:
-            self.values = get_frequencies()
+        # if self.mode:
+        #     self.values = get_iterations()
+        # else:
+        #     self.values = get_frequencies()
+
+        self.values = extract_sorted_values(os.path.join(base_path, folders[0]))
 
 
 
     def plot_single(self, value):
         global fig, canvas
+        fig.clf()  # Clear the figure to start fresh
 
-        # clear figure
-        fig.clf()
-        fast_particle_data = get_plotting_data(self.base_path, 'fastParticleBuffer', value, self.columns, self.mode, self.avg_window)
+        len_columns = len(self.columns)
+        len_folders = len(self.folders)
 
-        plt.plot(fast_particle_data[self.columns[0]], fast_particle_data[self.columns[1]],
-                 label=self.columns[1], color='b')
+        print(self.folders)
 
-        plt.plot(fast_particle_data[self.columns[0]], fast_particle_data[self.columns[2]],
-                 label=self.columns[2], color="r")
-        plt.title(f'Fast Particle Buffer')
-        plt.legend()
-        plt.grid(True)
-        plt.xlabel(self.plot_info.x_label)
-        plt.ylabel(self.plot_info.y_label)
+        folder_colors = map_folders_to_colors(self.folders)
 
-        plt.tight_layout()
+        random_colors = generate_distinct_colors(len_columns * len_folders)
+
+        color_flag = len_columns < 2 and set(self.folders).issubset(["fastParticleBuffer", "dynamicVLMerge"])
+
+        ax = fig.add_subplot(111)
+        counter = 0
+        for i in range(0, len_folders):
+
+            folder = self.folders[i]
+            data = get_plotting_data(self.base_path, folder, value, self.columns, self.mode,
+                                                   self.avg_window)
+
+
+            for j in range(1, len_columns): #the first column is the iteration column which is basically the x-axis
+
+                color = folder_colors[folder] if color_flag else random_colors[counter]
+                ax.plot(data[self.columns[0]], data[self.columns[j]],
+                        label=f"{folder} - {self.columns[j]}", color=color)
+                counter += 1
+
+        # ax.plot(fast_particle_data[self.columns[0]], fast_particle_data[self.columns[2]],
+        #         label=self.columns[2], color="r")
+
+        # ax.set_title('Fast Particle Buffer')
+        ax.set_xlabel(self.plot_info.x_label, fontsize=18)
+        ax.set_ylabel(self.plot_info.y_label, fontsize=18)
+        ax.tick_params(axis='both', which='major', labelsize=16)
+        ax.legend(fontsize=14)
+        ax.grid(True)
+
         canvas.draw()
 
     def plot_double(self, value):
         global fig, canvas
-        fig.clf()
+        fig.clf()  # Clear the figure
 
-        # columns = ['Iteration', 'computeInteractions[ns]', 'remainderTraversal[ns]']
+        len_columns = min(3, len(self.columns))  # Ensure max 2 y-columns + 1 x-column
+        len_folders = len(self.folders)
 
-        fast_particle_data = get_plotting_data(self.base_path, 'fastParticleBuffer', value, self.columns, self.mode, self.avg_window)
-        dynamic_vlmerge_data = get_plotting_data(self.base_path, 'dynamicVLMerge', value, self.columns, self.mode, self.avg_window)
+        if len_columns < 2:
+            print("Error: Need at least 2 columns (one X and one Y) for plotting.")
+            return
 
-        # plt.figure(figsize=(10, 6))
+        folder_colors = map_folders_to_colors(self.folders)
+        random_colors = generate_distinct_colors(len_folders)  # One color per folder
 
-        plt.subplot(2, 1, 1)
-        iteration_col = self.columns[0]
-        first_col = self.columns[1]
-        second_col = self.columns[2]
+        color_flag = len_folders == 2 and set(self.folders).issubset({"fastParticleBuffer", "dynamicVLMerge"})
 
-        plt.plot(fast_particle_data[iteration_col], fast_particle_data[first_col],
-                 label="fastParticleBuffer - computeInteractions[ns]", color='tab:blue')
-        plt.plot(dynamic_vlmerge_data[iteration_col], dynamic_vlmerge_data[first_col],
-                 label="dynamicVLMerge - computeInteractions[ns]", color='tab:orange')
-        plt.title(f'{first_col} vs {first_col}')
-        plt.legend()
-        plt.grid(True)
-        plt.xlabel(iteration_col)
-        plt.ylabel(self.plot_info.y_label)
+        ax1 = plt.subplot(2, 1, 1)
+        ax2 = plt.subplot(2, 1, 2)
 
-        plt.subplot(2, 1, 2)
-        plt.plot(fast_particle_data[iteration_col], fast_particle_data[second_col],
-                 label="fastParticleBuffer - remainderTraversal[ns]", color='tab:blue')
-        plt.plot(dynamic_vlmerge_data[iteration_col], dynamic_vlmerge_data[second_col],
-                 label="dynamicVLMerge - remainderTraversal[ns]", color='tab:orange')
+        for i, folder in enumerate(self.folders):
+            data = get_plotting_data(self.base_path, folder, value, self.columns, self.mode, self.avg_window)
 
-        plt.title(f'{second_col} vs {second_col}')
-        plt.legend()
-        plt.grid(True)
-        plt.xlabel(iteration_col)
-        plt.ylabel(self.plot_info.y_label)
+            color = folder_colors[folder] if color_flag else random_colors[i]
+
+            ax1.plot(data[self.columns[0]], data[self.columns[1]],
+                     label=f"{folder} - {self.columns[1]}", color=color)
+
+            ax2.plot(data[self.columns[0]], data[self.columns[2]],
+                     label=f"{folder} - {self.columns[2]}", color=color)
+
+        # Formatting for ax1
+        ax1.legend(fontsize=14)
+        ax1.grid(True)
+        ax1.set_xlabel(self.columns[0], fontsize=18)
+        ax1.set_ylabel(self.plot_info.y_label, fontsize=18)
+        ax1.tick_params(axis='both', which='major', labelsize=18)
+        ax1.ticklabel_format(style='scientific', axis='y', scilimits=(-2, 2))
+
+        # Formatting for ax2
+        ax2.legend(fontsize=14)
+        ax2.grid(True)
+        ax2.set_xlabel(self.columns[0], fontsize=18)
+        ax2.set_ylabel(self.plot_info.y_label, fontsize=18)
+        ax2.tick_params(axis='both', which='major', labelsize=18)
+        ax2.ticklabel_format(style='scientific', axis='y', scilimits=(-2, 2))
 
         plt.tight_layout()
         canvas.draw()
@@ -119,9 +152,9 @@ class CsvAnalyzer:
 
     def create_window(self):
 
-        if "Percentage" in self.base_path:
-            print("This plot is not available for percentage experiments, please choose runtime plot or distribution plot")
-            return
+        # if "Percentage" in self.base_path:
+        #     print("This plot is not available for percentage experiments, please choose runtime plot or distribution plot")
+        #     return
 
 
         global fig, canvas, toolbar
@@ -161,16 +194,13 @@ class CsvAnalyzer:
 
 if __name__ == "__main__":
 
-    base_path = "/home/xhulia/Desktop/Experiments/fallingDrop/vlc_c08/frequency_tests"
+    base_path = ""
 
-    folders = ["fastParticleBuffer", "dynamicVLMerge"]
-    yamlFileName = "fallingDrop.yaml"
-
-
-
-    #def __init__(self, base_path, columns, plot_info: PlotInfo, plot_type: PlotType):
-    columns =  ['Iteration', 'particleBufferSize', 'numberOfParticlesInContainer']
-    columns2 = ['Iteration', 'remainderTraversal[ns]', 'computeInteractions[ns]']
-    plot_info = PlotInfo('Iteration', 'Number of Particles', 'Graph' )
-    cvs_anal = CsvAnalyzer(base_path, columns2,plot_info, PlotType.SINGLE_PLOT )
-    cvs_anal.create_window()
+    folders = []
+    columns =  []
+    xlabel = ''
+    ylabel = ''
+    title = ''
+    plot_info = PlotInfo(xlabel, ylabel, title )
+    cvs_analyzer = CsvAnalyzer(base_path, columns,plot_info, PlotType.DOUBLE_PLOT, 100, ["fastParticleBuffer1", "fastParticleBuffer5"] )
+    cvs_analyzer.create_window()

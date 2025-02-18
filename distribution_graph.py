@@ -1,9 +1,8 @@
-import re
+import os
 from enum import Enum
 import numpy as np
 import matplotlib.pyplot as plt
-from graph_utils import find_yaml, read_slurm, map_folders_to_colors
-from matplotlib import cm, colors
+from graph_utils import PlotInfo, find_yaml, sort_criteria, read_slurm, map_folders_to_colors
 
 class PlotType(Enum):
     BOX_PLOT = 1
@@ -31,17 +30,6 @@ def format_folder_name(folder_name):
         formatted_percentage = f"{suffix}%"
         return f"fastParticleBuffer {formatted_percentage}"
     return folder_name
-
-def sort_criteria(folder):
-    if "fastParticleBuffer" in folder:
-        suffix = folder.replace("fastParticleBuffer", "")
-
-        if suffix.startswith("0") and len(suffix) > 1:
-            suffix = f"{suffix[0]}.{suffix[1:]}"
-
-        return float(suffix)
-    else:
-        return float('inf')
 
 
 def darken_color(color, factor=0.6):
@@ -147,10 +135,13 @@ def plot(data, folders, title, plot_type=PlotType.BOX_PLOT):
     plt.tight_layout()
     plt.show()
 
-def plot_distribution_graph(base_path, folders, plot_type: PlotType):
+def plot_distribution_graph(base_path, plot_type: PlotType, folders=[]):
     if not "Percentage" in base_path:
         print("This plot can only be used with percentage experiments. Try another plot!")
         return
+
+    if len(folders) == 0:
+        folders = [name for name in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, name))]
 
     yaml_file_name, yaml_file_path = find_yaml(base_path)
 
@@ -162,20 +153,9 @@ def plot_distribution_graph(base_path, folders, plot_type: PlotType):
 
 
 if __name__ == "__main__":
-    yamlFileName = "/home/xhulia/Desktop/Experiments/fallingDrop/withTuning/SpinodalDecomposition_equilibrationVlc_c08.yaml"
-    base_path = "/home/xhulia/Desktop/Experiments/PercentageExperiments/fallingDrop/vlc_c08/iteration_tests"
+    base_path = ""
+    folders = []
 
-    # Base paths
-    base_path = "/home/xhulia/Desktop/Experiments/PercentageExperiments/fallingDrop/vlc_c08/frequency_tests"
+    plot_distribution_graph(base_path, PlotType.VIOLIN_PLOT, folders)
 
-    # Folder groups
-    folders_pe_old = ["fastParticleBuffer10", "fastParticleBuffer15", "fastParticleBuffer20", "fastParticleBuffer30", "dynamicVLMerge"]
-    folders_pe_new = ["fastParticleBuffer1", "fastParticleBuffer5", "fastParticleBuffer05", "fastParticleBuffer10", "dynamicVLMerge"]
-    folders_del_fun = ["fastParticleBuffer10", "fastParticleBufferMarkAsDelete10", "dynamicVLMerge"]
-    folders_pe_spin = ["fastParticleBuffer1", "fastParticleBuffer5", "dynamicVLMerge"]
-    folders_pe_spin_del = ["fastParticleBuffer5", "dynamicVLMerge"]
-    folders_extra = ["fastParticleBuffer0", "fastParticleBuffer01", "fastParticleBuffer001", "fastParticleBuffer0001",
-                     "fastParticleBuffer1", "fastParticleBuffer5", "fastParticleBuffer05", "dynamicVLMerge"]
-    folders = folders_extra
 
-    plot_distribution_graph( base_path, folders, PlotType.VIOLIN_PLOT)

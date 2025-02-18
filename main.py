@@ -1,8 +1,8 @@
 import os
 from functools import partial
-from graph_utils import find_yaml, print_yaml_file
-from runtime_graph import plot_runtime
-from csv_analyzer_graph import PlotInfo, PlotType as PlotTypeCSV, CsvAnalyzer
+from graph_utils import PlotInfo, find_yaml, print_yaml_file
+from runtime_graph import plot_runtime, PlotType as PlotTypeRuntime
+from csv_analyzer_graph import PlotType as PlotTypeCSV, CsvAnalyzer
 from distribution_graph import plot_distribution_graph, PlotType as PlotTypeDistribution
 
 folders = ["fastParticleBuffer", "dynamicVLMerge"]
@@ -14,21 +14,30 @@ def runtime(base_path):
 
     folders_percentages = ["fastParticleBuffer10", "fastParticleBuffer15", "fastParticleBuffer20", "fastParticleBuffer30", "dynamicVLMerge"]
 
-    plot_runtime(base_path)
+    plot_runtime(base_path, PlotTypeRuntime.SCATTER_PLOT, folders)
 
 # Compare Compute Interactions in DVL and FP
 # Compare Remainder Traversal in DVL and FP
 def compare_dvl_fp(base_path):
-    columns = ['Iteration', 'remainderTraversal[ns]', 'computeInteractions[ns]']
+    col = ['computeInteractions[ns]', 'rebuildNeighborLists[ns]']
+    columns = ['Iteration', col[0], 'remainderTraversal[ns]']
     plot_info = PlotInfo('Iteration', 'Time [ns]', 'Graph')
-    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.DOUBLE_PLOT, avg_window=100)
+    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.DOUBLE_PLOT, 100, folders)
     cvs_anal.create_window()
 
 # Number of Particles in Buffer vs in Container in FastParticleBuffer
 def buffer_vs_container(base_path):
+    #numberFastParticles
     columns = ['Iteration', 'particleBufferSize', 'numberOfParticlesInContainer']
-    plot_info = PlotInfo('Iteration', 'Number of Particles', 'Graph')
-    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.SINGLE_PLOT, avg_window=100)
+    plot_info = PlotInfo('Iteration', 'Number of Particles in Buffer', 'Graph')
+    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.SINGLE_PLOT, 1, ["fastParticleBuffer"])
+    cvs_anal.create_window()
+
+def fast_particles(base_path):
+    #numberFastParticles
+    columns = ['Iteration', 'numberFastParticles']
+    plot_info = PlotInfo('Iteration', 'particleBufferSize', 'Graph')
+    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.SINGLE_PLOT, 1, ["fastParticleBuffer"])
     cvs_anal.create_window()
 
 # Compute Interactions vs Remainder Traversal in Fast Particle Buffer
@@ -37,7 +46,7 @@ def ci_vs_rt_fp(base_path):
     columns = ['Iteration', 'remainderTraversal[ns]', 'computeInteractions[ns]']
     plot_info = PlotInfo('Iteration', 'Time [ns]', 'Graph')
 
-    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.SINGLE_PLOT, avg_window=100)
+    cvs_anal = CsvAnalyzer(base_path, columns, plot_info, PlotTypeCSV.SINGLE_PLOT, 100, folders)
     cvs_anal.create_window()
 
 # Distribution Plots for repeated percentage experiments
@@ -45,7 +54,7 @@ def ci_vs_rt_fp(base_path):
 def distribution_plots(base_path, plot_type: PlotTypeDistribution):
     folders = ["fastParticleBuffer0", "fastParticleBuffer01", "fastParticleBuffer001", "fastParticleBuffer0001",
                      "fastParticleBuffer1", "fastParticleBuffer5", "fastParticleBuffer05", "dynamicVLMerge"]
-    plot_distribution_graph(base_path, folders, plot_type)
+    plot_distribution_graph(base_path, plot_type, folders)
 
 if __name__ == "__main__":
 
@@ -61,6 +70,7 @@ if __name__ == "__main__":
         ("Compare Dynamic VL Merge and Fast Particle Buffer", lambda: compare_dvl_fp(base_path)),
         ("Compute Interactions vd Remainder Traversal in Fast Particle Buffer", lambda: ci_vs_rt_fp(base_path)),
         ("Number of Particles in Buffer vs in Container in FastParticleBuffer", lambda: buffer_vs_container(base_path)),
+        ("Number of Fast Particles found every Iteration in FastParticleBuffer", lambda: fast_particles(base_path)),
         ("Distribution Plots for repeated percentage experiments (Box)",
          lambda: distribution_plots(base_path, PlotTypeDistribution.BOX_PLOT))
     ]
